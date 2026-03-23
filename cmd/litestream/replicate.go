@@ -70,7 +70,7 @@ func (c *ReplicateCommand) ParseFlags(_ context.Context, args []string) (err err
 	onceFlag := fs.Bool("once", false, "replicate once and exit")
 	forceSnapshotFlag := fs.Bool("force-snapshot", false, "force snapshot when replicating once")
 	enforceRetentionFlag := fs.Bool("enforce-retention", false, "enforce retention of old snapshots when replicating once")
-	configPath, noExpandEnv := registerConfigFlag(fs)
+	configPath, noExpandEnv, fromStdin := registerConfigFlag(fs)
 	fs.Usage = c.Usage
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -79,11 +79,8 @@ func (c *ReplicateCommand) ParseFlags(_ context.Context, args []string) (err err
 	// Load configuration or use CLI args to build db/replica.
 	switch fs.NArg() {
 	case 0:
-		// No arguments provided, use config file
-		if *configPath == "" {
-			*configPath = DefaultConfigPath()
-		}
-		if c.Config, err = ReadConfigFile(*configPath, !*noExpandEnv); err != nil {
+		// No arguments provided, use config file or stdin
+		if c.Config, err = ReadConfig(*configPath, *fromStdin, !*noExpandEnv); err != nil {
 			return err
 		}
 		// Override log level if CLI flag provided (takes precedence over env var)
@@ -106,6 +103,9 @@ func (c *ReplicateCommand) ParseFlags(_ context.Context, args []string) (err err
 		// Database path and replica URLs provided via CLI
 		if *configPath != "" {
 			return fmt.Errorf("cannot specify a replica URL and the -config flag")
+		}
+		if *fromStdin {
+			return fmt.Errorf("cannot specify a replica URL and the -stdin flag")
 		}
 
 		// Initialize config with defaults when using command-line arguments
@@ -533,6 +533,9 @@ Arguments:
 	-config PATH
 	    Specifies the configuration file.
 	    Defaults to %s
+
+	-stdin
+	    Read configuration from stdin instead of a file.
 
 	-exec CMD
 	    Executes a subcommand. Litestream will exit when the child
